@@ -36,7 +36,7 @@ func makeColumns(ctx context.Context, schema providers.Schema) []*plugin.Column 
 			Name:        k,
 			Type:        attrTypeToColumnType(ctx, i.Type),
 			Description: i.Description,
-			// Transform: ???,
+			Transform:   FromCtyMapKey(k),
 		})
 	}
 
@@ -46,7 +46,7 @@ func makeColumns(ctx context.Context, schema providers.Schema) []*plugin.Column 
 			Name:        k,
 			Type:        proto.ColumnType_JSON,
 			Description: i.Description,
-			// Transform: ???,
+			Transform:   FromCtyMapKey(k),
 		})
 	}
 
@@ -54,28 +54,59 @@ func makeColumns(ctx context.Context, schema providers.Schema) []*plugin.Column 
 }
 
 func makeKeyColumns(ctx context.Context, schema providers.Schema) plugin.KeyColumnSlice {
-	keyColumns := []string{}
+	mandatoryKeyColumns := []string{}
+	optionalKeyColumns := []string{}
 
-	// TODO How does the TF doc generator detect Arguments vs. Other Fields???
 	for k, i := range schema.Block.Attributes {
-		if i.Required && !i.Computed {
-			keyColumns = append(keyColumns, k)
-		}
-	}
-	for k, i := range schema.Block.BlockTypes {
-		if i.MinItems > 0 {
-			keyColumns = append(keyColumns, k)
+		if childAttributeIsRequired(i) {
+			mandatoryKeyColumns = append(mandatoryKeyColumns, k)
+			plugin.Logger(ctx).Debug("makeKeyColumns", "column", k, "data", i, "disposition", "mandatory")
+		} else if childAttributeIsOptional(i) {
+			optionalKeyColumns = append(optionalKeyColumns, k)
+			plugin.Logger(ctx).Debug("makeKeyColumns", "column", k, "data", i, "disposition", "optional")
+		} else if childAttributeIsReadOnly(i) {
+			// Read-only attrs don't become KeyColumns
+			plugin.Logger(ctx).Debug("makeKeyColumns", "column", k, "data", i, "disposition", "ignore")
+		} else {
+			// should never happen, right?
+			plugin.Logger(ctx).Error("makeKeyColumns", "column", k, "data", i, "disposition", "INVALID")
 		}
 	}
 
-	var all = make([]*plugin.KeyColumn, len(keyColumns))
-	for i, c := range keyColumns {
-		all[i] = &plugin.KeyColumn{
+	// Remember that all nested blocks become JSONB columns on Steampipe, no matter what
+	for k, i := range schema.Block.BlockTypes {
+		if childBlockIsRequired(i) {
+			mandatoryKeyColumns = append(mandatoryKeyColumns, k)
+			plugin.Logger(ctx).Debug("makeKeyColumns", "column", k, "data", i, "disposition", "mandatory")
+		} else if childBlockIsOptional(i) {
+			optionalKeyColumns = append(optionalKeyColumns, k)
+			plugin.Logger(ctx).Debug("makeKeyColumns", "column", k, "data", i, "disposition", "optional")
+		} else if childBlockIsReadOnly(i) {
+			// Read-only nested blocks don't become KeyColumns
+			plugin.Logger(ctx).Debug("makeKeyColumns", "column", k, "data", i, "disposition", "ignore")
+		} else {
+			// should never happen, right?
+			plugin.Logger(ctx).Error("makeKeyColumns", "column", k, "data", i, "disposition", "INVALID")
+		}
+	}
+
+	var all = make([]*plugin.KeyColumn, 0, len(mandatoryKeyColumns)+len(optionalKeyColumns))
+	for _, c := range mandatoryKeyColumns {
+		all = append(all, &plugin.KeyColumn{
 			Name:      c,
 			Operators: []string{"="},
-			Require:   plugin.Required,
-		}
+			Require:   plugin.Required, // Magic is here
+		})
 	}
+	for _, c := range optionalKeyColumns {
+		all = append(all, &plugin.KeyColumn{
+			Name:      c,
+			Operators: []string{"="},
+			Require:   plugin.Optional, // Magic is here
+		})
+	}
+
+	plugin.Logger(ctx).Info("makeKeyColumns.done", "len", len(all), "mand", mandatoryKeyColumns, "opt", optionalKeyColumns, "val", all)
 	return all
 }
 
@@ -88,14 +119,34 @@ func attrTypeToColumnType(ctx context.Context, attrType cty.Type) proto.ColumnTy
 	case cty.Bool:
 		return proto.ColumnType_BOOL
 	default:
-		plugin.Logger(ctx).Error("tfbridge.attrTypeToColumnType", "unknown_type_on_attr", attrType.FriendlyName())
+		// fear the unknown, cast as JSON
+		// this catches tuple, list, set (array-likes), object, map (dict-likes) and probably others?
+		// plz no capsule types
+		plugin.Logger(ctx).Warn("tfbridge.attrTypeToColumnType", "unknown_type_on_attr", attrType.FriendlyName())
 		return proto.ColumnType_JSON
 	}
 }
 
-func ListDataSource(path string) func(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
+func ListDataSource(name string) func(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
 	return func(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
-		plugin.Logger(ctx).Info("tfbridge.ListDataSource", "quals", d.Quals)
+		config := GetConfig(d.Connection)
+
+		plugin.Logger(ctx).Info("tfbridge.ListDataSource", "equalsQuals", d.EqualsQuals)
+		conn, err := getPluginConnection(*config.Provider)
+		if err != nil {
+			plugin.Logger(ctx).Warn("tfbridge.ListDataSource.getPluginConnection", "provider", *config.Provider)
+			return nil, err
+		}
+
+		response, err := readDataSource(ctx, conn, name, d.EqualsQuals)
+		if err != nil {
+			plugin.Logger(ctx).Warn("tfbridge.ListDataSource.readDataSource", "name", name)
+			return nil, err
+		}
+		responseMap := response.AsValueMap()
+		plugin.Logger(ctx).Info("tfbridge.ListDataSource.response", "data", responseMap)
+		d.StreamListItem(ctx, responseMap)
+
 		return nil, nil
 	}
 }

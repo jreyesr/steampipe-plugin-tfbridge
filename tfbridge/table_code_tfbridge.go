@@ -10,7 +10,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-func tableTFBridge(ctx context.Context, connection *plugin.Connection) (*plugin.Table, error) {
+func tableTFBridge(ctx context.Context, connection *plugin.Connection, pluginLocation string) (*plugin.Table, error) {
 	name := ctx.Value(keyDataSource).(string)
 	schema := ctx.Value(keySchema).(providers.Schema)
 
@@ -18,7 +18,7 @@ func tableTFBridge(ctx context.Context, connection *plugin.Connection) (*plugin.
 		Name:        name,
 		Description: fmt.Sprintf("%s: %s", name, schema.Block.Description),
 		List: &plugin.ListConfig{
-			Hydrate:    ListDataSource(name),
+			Hydrate:    ListDataSource(name, pluginLocation),
 			KeyColumns: makeKeyColumns(ctx, schema),
 		},
 		Columns: makeColumns(ctx, schema),
@@ -127,12 +127,13 @@ func attrTypeToColumnType(ctx context.Context, attrType cty.Type) proto.ColumnTy
 	}
 }
 
-func ListDataSource(name string) func(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
+func ListDataSource(name, pluginLocation string) func(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
 	return func(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
 		config := GetConfig(d.Connection)
 
 		plugin.Logger(ctx).Info("tfbridge.ListDataSource", "equalsQuals", d.EqualsQuals)
-		conn, err := getPluginConnection(*config.Provider)
+		plugin.Logger(ctx).Info("tfbridge.ListDataSource", "location", pluginLocation)
+		conn, err := getPluginConnection(pluginLocation)
 		if err != nil {
 			plugin.Logger(ctx).Warn("tfbridge.ListDataSource.getPluginConnection", "provider", *config.Provider)
 			return nil, err

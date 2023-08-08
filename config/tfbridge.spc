@@ -1,10 +1,9 @@
 connection "tfbridge" {
-  plugin = "tfbridge"
+  plugin = "jreyesr/tfbridge"
 
-  provider = "cloudflare/cloudflare"
-  version = "4.11.0"
-  
-  provider_config = {
-    api_user_service_key = "my_service_key"
-  }
+  provider = "hashicorp/dns"
+  version = "3.2.4"
+
+  provider_config = <<EOT
+  EOT
 }

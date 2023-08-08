@@ -36,9 +36,18 @@ func PluginTables(ctx context.Context, d *plugin.TableMapData) (map[string]*plug
 	// Initialize tables
 	tables := map[string]*plugin.Table{}
 
-	// Search for CSV files to create as tables
 	config := GetConfig(d.Connection)
-	conn, err := getPluginConnection(*config.Provider)
+
+	// Download requested provider to tempdir
+	pluginBinaryPath, err := DownloadProvider(ctx, *config.Provider, *config.Version, d)
+	if err != nil {
+		plugin.Logger(ctx).Error("tfbridge.PluginTables", "download_provider_error", err, "provider", *config.Provider)
+		return nil, err
+	}
+	plugin.Logger(ctx).Info("tfbridge.PluginTables", "plugin_download_path", pluginBinaryPath)
+
+	// Establish connection with downloaded provider
+	conn, err := getPluginConnection(pluginBinaryPath)
 	if err != nil {
 		plugin.Logger(ctx).Error("tfbridge.PluginTables", "get_connection_error", err, "provider", *config.Provider)
 		return nil, err
@@ -53,7 +62,7 @@ func PluginTables(ctx context.Context, d *plugin.TableMapData) (map[string]*plug
 		fmt.Printf("%s %v", k, i)
 		// Nested WithValue: set two keys on the same context
 		tableCtx := context.WithValue(context.WithValue(ctx, keyDataSource, k), keySchema, i)
-		table, err := tableTFBridge(tableCtx, d.Connection)
+		table, err := tableTFBridge(tableCtx, d.Connection, pluginBinaryPath)
 		if err != nil {
 			plugin.Logger(ctx).Error("tfbridge.PluginTables", "create_table_error", err, "datasource", k)
 			return nil, err

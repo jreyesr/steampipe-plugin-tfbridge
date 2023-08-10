@@ -8,7 +8,7 @@ import (
 	"path"
 	"runtime"
 
-	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/jreyesr/steampipe-plugin-tfbridge/tfdiags"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -18,7 +18,7 @@ import (
 // Since we don't use RPC status errors for the plugin protocol, these do not
 // contain any useful details, and we can return some text that at least
 // indicates the plugin call and possible error condition.
-func grpcErr(err error) (diags diag.Diagnostics) {
+func grpcErr(err error) (diags tfdiags.Diagnostics) {
 	if err == nil {
 		return
 	}
@@ -27,7 +27,7 @@ func grpcErr(err error) (diags diag.Diagnostics) {
 	pc, _, _, ok := runtime.Caller(1)
 	if !ok {
 		logger.Error("unknown grpc call", "error", err)
-		diags.AddError("error", err.Error())
+		return diags.Append(err)
 	}
 
 	f := runtime.FuncForPC(pc)
@@ -48,25 +48,31 @@ func grpcErr(err error) (diags diag.Diagnostics) {
 	case codes.Unavailable:
 		// This case is when the plugin has stopped running for some reason,
 		// and is usually the result of a crash.
-		diags.AddError("error",
+		diags = diags.Append(tfdiags.WholeContainingBody(
+			tfdiags.Error,
+			"Plugin did not respond",
 			fmt.Sprintf("The plugin encountered an error, and failed to respond to the %s call. "+
 				"The plugin logs may contain more details.", requestName),
-		)
+		))
 	case codes.Canceled:
-		diags.AddError(
+		diags = diags.Append(tfdiags.WholeContainingBody(
+			tfdiags.Error,
 			"Request cancelled",
 			fmt.Sprintf("The %s request was cancelled.", requestName),
-		)
+		))
 	case codes.Unimplemented:
-		diags.AddError(
+		diags = diags.Append(tfdiags.WholeContainingBody(
+			tfdiags.Error,
 			"Unsupported plugin method",
 			fmt.Sprintf("The %s method is not supported by this plugin.", requestName),
-		)
+		))
 	default:
-		diags.AddError(
+		diags = diags.Append(tfdiags.WholeContainingBody(
+			tfdiags.Error,
 			"Plugin error",
 			fmt.Sprintf("The plugin returned an unexpected error from %s: %v", requestName, err),
-		)
+		))
 	}
+
 	return
 }

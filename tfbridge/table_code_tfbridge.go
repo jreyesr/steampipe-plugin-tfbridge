@@ -135,7 +135,12 @@ func ListDataSource(name, pluginLocation string) func(ctx context.Context, d *pl
 		plugin.Logger(ctx).Info("tfbridge.ListDataSource", "location", pluginLocation)
 		conn, err := getPluginConnection(pluginLocation)
 		if err != nil {
-			plugin.Logger(ctx).Warn("tfbridge.ListDataSource.getPluginConnection", "provider", *config.Provider)
+			plugin.Logger(ctx).Warn("tfbridge.ListDataSource.getPluginConnection", "provider", *config.Provider, "err", err)
+			return nil, err
+		}
+		err = configureProvider(ctx, conn, *config.ProviderConfig)
+		if err != nil {
+			plugin.Logger(ctx).Warn("tfbridge.ListDataSource.configureProvider", "provider", *config.Provider, "config", config.ProviderConfig, "err", err)
 			return nil, err
 		}
 

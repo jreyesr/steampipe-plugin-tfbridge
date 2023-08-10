@@ -7,6 +7,9 @@ import (
 	"os/exec"
 
 	"github.com/hashicorp/go-plugin"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hcldec"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/jreyesr/steampipe-plugin-tfbridge/logging"
 	tfplugin "github.com/jreyesr/steampipe-plugin-tfbridge/plugin"
 	"github.com/jreyesr/steampipe-plugin-tfbridge/providers"
@@ -51,6 +54,49 @@ func getPluginConnection(pluginPath string) (*tfplugin.GRPCProvider, error) {
 	return provider, nil
 }
 
+func getProviderSchema(ctx context.Context, provider *tfplugin.GRPCProvider) hcldec.Spec {
+	schema := provider.GetProviderSchema()
+	spec := schema.Provider.Block.DecoderSpec()
+
+	return spec
+}
+
+func configureProvider(ctx context.Context, provider *tfplugin.GRPCProvider, rawConfig string) error {
+	spPlugin.Logger(ctx).Debug("configureProvider", "rawConfig", rawConfig)
+
+	// grab config schema from provider
+	spec := getProviderSchema(ctx, provider)
+
+	// parse HCL string using provider's schema as blueprint
+	// if it fails, user wrote incorrect HCL string on .spc file
+	parser := hclparse.NewParser()
+	f, err := parser.ParseHCL([]byte(rawConfig), "config.hcl")
+	if err != nil {
+		spPlugin.Logger(ctx).Error("configureProvider.ParseHCL", "rawConfig", rawConfig, "err", err)
+		return err
+	}
+	cfgVal, err := hcldec.Decode(f.Body, spec, &hcl.EvalContext{})
+	if err != nil {
+		spPlugin.Logger(ctx).Error("configureProvider.Decode", "body", f.Body, "spec", spec)
+		return err
+	}
+
+	configType := hcldec.ImpliedType(spec)
+	spPlugin.Logger(ctx).Debug("configureProvider", "parsedConfigType", configType, "parsedConfig", cfgVal)
+
+	// ACTUALLY send the configure RPC to provider binary
+	configureResponse := provider.ConfigureProvider(providers.ConfigureProviderRequest{
+		TerraformVersion: "999.0.0",
+		Config:           cfgVal,
+	})
+	if configureResponse.Diagnostics.HasErrors() {
+		spPlugin.Logger(ctx).Error("configureProvider.ConfigureProvider", "config", cfgVal, "err", configureResponse.Diagnostics.Err())
+		return configureResponse.Diagnostics.Err()
+	}
+
+	return nil
+}
+
 func getDataSources(provider *tfplugin.GRPCProvider) (map[string]providers.Schema, error) {
 	schema := provider.GetProviderSchema()
 	if schema.Diagnostics.HasErrors() {
@@ -81,6 +127,7 @@ func readDataSource(ctx context.Context, provider *tfplugin.GRPCProvider, dataSo
 		return nil, err
 	}
 	dsSchemaType := dsSchema.Block.ImpliedType()
+	spPlugin.Logger(ctx).Debug("readDataSource", "dsSchema", dsSchema, "dsSchemaType", dsSchemaType)
 
 	simpleQuals := make(map[string]any)
 	for k, v := range quals {

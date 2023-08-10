@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime"
+	"strings"
 
 	tfaddr "github.com/hashicorp/terraform-registry-address"
 	"github.com/hashicorp/terraform-svchost/disco"
@@ -19,6 +21,41 @@ type discoveryResponse struct {
 
 type pluginVersionResponse struct {
 	DownloadURL string `json:"download_url"`
+}
+
+// This function contains some parts of code that is Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+// see https://github.com/hashicorp/terraform/blob/e26d07dda41a74a009b1b750471395bf8773601c/internal/providercache/cached_provider.go#L106
+/*
+isProviderBinary checks if the passed file could be the actual provider binary inside of a downloaded (decompressed) directory, which may hold extra files.
+README and LICENSE have been spotted in addition to the actual provider binary
+
+For a provider named e.g. tf.example.com/awesomecorp/happycloud, we
+expect an executable file whose name starts with
+"terraform-provider-happycloud", followed by zero or more additional
+characters. If there _are_ additional characters then the first one
+must be an underscore or a period
+*/
+func isProviderBinary(ctx context.Context, fname string, provider tfaddr.Provider) (bool, error) {
+	expectedNameStart := "terraform-provider-" + provider.Type
+	expectedPeriod := expectedNameStart + "."
+	expectedUnderscore := expectedNameStart + "_"
+
+	fileInfo, err := os.Stat(fname)
+	if err != nil {
+		plugin.Logger(ctx).Info("findProviderBinary", "error", err, "filename", fname)
+		return false, err
+	}
+
+	if fileInfo.IsDir() {
+		return false, nil
+	}
+	// There's no platform-independent way of checking the executableness of a file, so we don't try
+	// IOW, we are just searching for a real file (non-dir) that starts with the magic words
+	if fileInfo.Name() == expectedNameStart || strings.HasPrefix(fileInfo.Name(), expectedPeriod) || strings.HasPrefix(fileInfo.Name(), expectedUnderscore) {
+		return true, nil
+	}
+	return false, nil
 }
 
 /*
@@ -84,12 +121,19 @@ func DownloadProvider(ctx context.Context, name, version string, d *plugin.Table
 	if err != nil {
 		return
 	}
-	if len(paths) != 1 {
-		err = fmt.Errorf("unexpected number of files: %d %v, expected 1 file", len(paths), paths)
-		return
+	for _, p := range paths {
+		canBe, detectErr := isProviderBinary(ctx, p, provider)
+		if err != nil {
+			err = detectErr
+			return
+		}
+		if canBe {
+			path = p
+			return
+		}
 	}
 
-	path = paths[0]
-	// path = "/home/reyes/code/steampipe-plugin-tfbridge/terraform-provider-dns_v3.2.4_x5"
+	// if we reached here, we couldn't find a binary candidate
+	err = fmt.Errorf("couldn't find binary for provider %s among files %v", provider.ForDisplay(), paths)
 	return
 }

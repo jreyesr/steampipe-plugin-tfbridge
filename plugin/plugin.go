@@ -5,6 +5,7 @@ package plugin
 
 import (
 	"github.com/hashicorp/go-plugin"
+	"github.com/jreyesr/steampipe-plugin-tfbridge/plugin6"
 )
 
 // VersionedPlugins includes both protocol 5 and 6 because this is the function
@@ -14,5 +15,7 @@ var VersionedPlugins = map[int]plugin.PluginSet{
 	5: {
 		"provider": &GRPCProviderPlugin{},
 	},
-	6: {},
+	6: {
+		"provider": &plugin6.GRPCProviderPlugin{},
+	},
 }

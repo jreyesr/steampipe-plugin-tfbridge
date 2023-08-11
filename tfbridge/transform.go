@@ -60,7 +60,7 @@ func ctyValToSteampipeVal(ctx context.Context, tf *transform.TransformData) (int
 		json.Unmarshal(asJsonList, &x)
 		return x, nil
 	// map-like types, save into generic-est map
-	case val.Type().IsMapType() || val.Type().IsTupleType():
+	case val.Type().IsMapType() || val.Type().IsObjectType():
 		asJson, err := ctyJson.SimpleJSONValue{Value: val}.MarshalJSON()
 		if err != nil {
 			return nil, err

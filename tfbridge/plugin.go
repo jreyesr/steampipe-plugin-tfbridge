@@ -2,7 +2,6 @@ package tfbridge
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/turbot/steampipe-plugin-sdk/v5/plugin"
 	"github.com/turbot/steampipe-plugin-sdk/v5/plugin/transform"
@@ -58,8 +57,8 @@ func PluginTables(ctx context.Context, d *plugin.TableMapData) (map[string]*plug
 		plugin.Logger(ctx).Error("tfbridge.PluginTables", "get_data_sources_error", err)
 		return nil, err
 	}
+	plugin.Logger(ctx).Debug("tfbridge.PluginTables.getDataSources", "ds", dataSources)
 	for k, i := range dataSources {
-		fmt.Printf("%s %v", k, i)
 		// Nested WithValue: set two keys on the same context
 		tableCtx := context.WithValue(context.WithValue(ctx, keyDataSource, k), keySchema, i)
 		table, err := tableTFBridge(tableCtx, d.Connection, pluginBinaryPath)
@@ -68,8 +67,10 @@ func PluginTables(ctx context.Context, d *plugin.TableMapData) (map[string]*plug
 			return nil, err
 		}
 
+		plugin.Logger(ctx).Debug("tfbridge.PluginTables.makeTables", "name", k, "table", table)
 		tables[k] = table
 	}
+	plugin.Logger(ctx).Debug("tfbridge.PluginTables.makeTables", "tables", tables)
 	// paths, err := csvList(ctx, p)
 	// if err != nil {
 	// 	return nil, err

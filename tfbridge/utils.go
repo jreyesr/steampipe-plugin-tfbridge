@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/jreyesr/steampipe-plugin-tfbridge/logging"
 	tfplugin "github.com/jreyesr/steampipe-plugin-tfbridge/plugin"
+	tfplugin6 "github.com/jreyesr/steampipe-plugin-tfbridge/plugin6"
 	"github.com/jreyesr/steampipe-plugin-tfbridge/providers"
 	"github.com/turbot/steampipe-plugin-sdk/v5/grpc/proto"
 	spPlugin "github.com/turbot/steampipe-plugin-sdk/v5/plugin"
@@ -25,7 +26,7 @@ var Handshake = plugin.HandshakeConfig{
 	MagicCookieValue: "d602bf8f470bc67ca7faa0386276bbdd4330efaf76d1a219cb4d6991ca9872b2",
 }
 
-func getPluginConnection(pluginPath string) (*tfplugin.GRPCProvider, error) {
+func getPluginConnection(pluginPath string) (providers.Interface, error) {
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig:  Handshake,
 		VersionedPlugins: tfplugin.VersionedPlugins,
@@ -46,22 +47,30 @@ func getPluginConnection(pluginPath string) (*tfplugin.GRPCProvider, error) {
 	if err != nil {
 		return nil, err
 	}
-	provider, valid := x.(*tfplugin.GRPCProvider)
-	if !valid {
-		return nil, fmt.Errorf("can't cast %v (%T) to GRPCProvider", provider, provider)
+	// store the client so that the plugin can kill the child process
+	protoVer := client.NegotiatedVersion()
+	switch protoVer {
+	case 5:
+		p := x.(*tfplugin.GRPCProvider)
+		p.PluginClient = client
+		return p, nil
+	case 6:
+		p := x.(*tfplugin6.GRPCProvider)
+		p.PluginClient = client
+		return p, nil
+	default:
+		return nil, fmt.Errorf("can't cast %v (%T) to GRPCProvider", x, x)
 	}
-
-	return provider, nil
 }
 
-func getProviderSchema(ctx context.Context, provider *tfplugin.GRPCProvider) hcldec.Spec {
+func getProviderSchema(ctx context.Context, provider providers.Interface) hcldec.Spec {
 	schema := provider.GetProviderSchema()
 	spec := schema.Provider.Block.DecoderSpec()
 
 	return spec
 }
 
-func configureProvider(ctx context.Context, provider *tfplugin.GRPCProvider, rawConfig string) error {
+func configureProvider(ctx context.Context, provider providers.Interface, rawConfig string) error {
 	spPlugin.Logger(ctx).Debug("configureProvider", "rawConfig", rawConfig)
 
 	// grab config schema from provider
@@ -97,7 +106,7 @@ func configureProvider(ctx context.Context, provider *tfplugin.GRPCProvider, raw
 	return nil
 }
 
-func getDataSources(provider *tfplugin.GRPCProvider) (map[string]providers.Schema, error) {
+func getDataSources(provider providers.Interface) (map[string]providers.Schema, error) {
 	schema := provider.GetProviderSchema()
 	if schema.Diagnostics.HasErrors() {
 		return nil, schema.Diagnostics.Err()
@@ -106,7 +115,7 @@ func getDataSources(provider *tfplugin.GRPCProvider) (map[string]providers.Schem
 	return schema.DataSources, nil
 }
 
-func getDataSourceSchema(provider *tfplugin.GRPCProvider, dataSourceName string) (*providers.Schema, error) {
+func getDataSourceSchema(provider providers.Interface, dataSourceName string) (*providers.Schema, error) {
 	schemas, err := getDataSources(provider)
 	if err != nil {
 		return nil, err
@@ -120,7 +129,7 @@ func getDataSourceSchema(provider *tfplugin.GRPCProvider, dataSourceName string)
 	return &schema, nil
 }
 
-func readDataSource(ctx context.Context, provider *tfplugin.GRPCProvider, dataSourceName string, quals map[string]*proto.QualValue) (*cty.Value, error) {
+func readDataSource(ctx context.Context, provider providers.Interface, dataSourceName string, quals map[string]*proto.QualValue) (*cty.Value, error) {
 	dsSchema, err := getDataSourceSchema(provider, dataSourceName)
 	if err != nil {
 		spPlugin.Logger(ctx).Warn("readDataSource.getDataSourceSchema", "provider", provider, "dataSource", dataSourceName)

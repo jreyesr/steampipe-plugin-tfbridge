@@ -141,13 +141,27 @@ func readDataSource(ctx context.Context, provider providers.Interface, dataSourc
 	simpleQuals := make(map[string]any)
 	for k, v := range quals {
 		if attr, ok := dsSchema.Block.Attributes[k]; ok {
-			switch attr.Type {
-			case cty.Number:
+			switch {
+			case attr.Type == cty.Number:
 				simpleQuals[k] = v.GetDoubleValue()
-			case cty.String:
+			case attr.Type == cty.String:
 				simpleQuals[k] = v.GetStringValue()
-			case cty.Bool:
+			case attr.Type == cty.Bool:
 				simpleQuals[k] = v.GetBoolValue()
+			case attr.Type.IsMapType() || attr.Type.IsObjectType(): // deserialize JSON string to map[string]any
+				var d map[string]any
+				err := json.Unmarshal([]byte(v.GetJsonbValue()), &d)
+				if err != nil {
+					return nil, err
+				}
+				simpleQuals[k] = d
+			case attr.Type.IsListType() || attr.Type.IsTupleType() || attr.Type.IsSetType(): // deserialize JSON string to []any
+				var d []any
+				err := json.Unmarshal([]byte(v.GetJsonbValue()), &d)
+				if err != nil {
+					return nil, err
+				}
+				simpleQuals[k] = d
 			default:
 				errmsg := fmt.Errorf("type %v can't be handled by quals", attr.Type)
 				spPlugin.Logger(ctx).Warn("readDataSource.makeSimpleQuals.unsupported", "qualName", k, "qual", v, "typeInSchema", attr.Type, "err", errmsg)

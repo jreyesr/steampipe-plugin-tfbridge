@@ -17,9 +17,6 @@ func Plugin(ctx context.Context) *plugin.Plugin {
 		},
 		SchemaMode:   plugin.SchemaModeDynamic,
 		TableMapFunc: PluginTables,
-		// TableMap: map[string]*plugin.Table{
-		// 	"tfbridge_ds_1": tableTFBridgeZone(),
-		// },
 	}
 	return p
 }

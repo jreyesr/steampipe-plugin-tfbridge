@@ -1,6 +1,6 @@
 module github.com/jreyesr/steampipe-plugin-tfbridge
 
-go 1.20
+go 1.19
 
 require (
 	github.com/hashicorp/errwrap v1.1.0

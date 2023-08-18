@@ -1,8 +1,85 @@
-# `steampipe-plugin-tfbridge`
+![image](https://hub.steampipe.io/images/plugins/jreyesr/tfbridge-social-graphic.png)
 
-**WORK IN PROGRESS:** Don't use, the code is unstable! It may not do what it says, config values may behave strangely, parts may just print a message and do nothing.
+# Terraform Bridge Plugin for Steampipe
+
+Use SQL to query data from the datasources of any Terraform provider.
 
 This repo contains a [Steampipe](https://steampipe.io/) plugin that lets the user call any (?) [data source that is exposed by a Terraform provider](https://developer.hashicorp.com/terraform/language/data-sources). This will expand the reach of Steampipe's plugins to also cover remote APIs that have a Terraform provider but no Steampipe plugin. This will also let users unify efforts: the Terraform provider can be used to manage resources, and querying on the current state of those resources can be done via Steampipe, using the same source code and provider.
+
+
+- **[Get started →](https://hub.steampipe.io/plugins/jreyesr/tfbridge)**
+- Documentation: [Table definitions & examples](https://hub.steampipe.io/plugins/jreyesr/tfbridge/tables)
+- Community: [Join #steampipe on Slack →](https://turbot.com/community/join)
+- Get involved: [Issues](https://github.com/jreyesr/steampipe-plugin-tfbridge/issues)
+
+## Quick start
+
+Install the plugin with [Steampipe](https://steampipe.io):
+
+```shell
+steampipe plugin install jreyesr/tfbridge
+```
+
+Configure your [config file](https://hub.steampipe.io/plugins/jreyesr/tfbridge#configuration) to point to a Terraform provider+version. If the Terraform provider requires configuration values, provide them too.
+
+Run steampipe:
+
+```shell
+steampipe query
+```
+
+Run a query for whatever data source the Terraform provider exposes:
+
+```sql
+select
+  attr1,
+  attr2
+from
+  datasource_name;
+```
+
+## Developing
+
+Prerequisites:
+
+- [Steampipe](https://steampipe.io/downloads)
+- [Golang](https://golang.org/doc/install)
+
+Clone:
+
+```sh
+git clone https://github.com/jreyesr/steampipe-plugin-tfbridge.git
+cd steampipe-plugin-tfbridge
+```
+
+Build, which automatically installs the new version to your `~/.steampipe/plugins` directory:
+
+```
+make
+```
+
+Configure the plugin:
+
+```
+cp config/* ~/.steampipe/config
+vi ~/.steampipe/config/tfbridge.spc
+```
+
+Try it!
+
+```
+steampipe query
+> .inspect tfbridge
+```
+
+Further reading:
+
+- [Writing plugins](https://steampipe.io/docs/develop/writing-plugins)
+- [Writing your first table](https://steampipe.io/docs/develop/writing-your-first-table)
+
+## Contributing
+
+Please see the [contribution guidelines](https://github.com/turbot/steampipe/blob/main/CONTRIBUTING.md) and our [code of conduct](https://github.com/turbot/steampipe/blob/main/CODE_OF_CONDUCT.md). All contributions are subject to the [Mozilla Public License 2.0 open source license](https://github.com/jreyesr/steampipe-plugin-tfbridge/blob/main/LICENSE).
 
 
 ## Old proof of concept

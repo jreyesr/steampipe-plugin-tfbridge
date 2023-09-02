@@ -6,7 +6,7 @@ brand_color: "#844FBA"
 display_name: Terraform Bridge
 name: tfbridge
 description: Steampipe plugin for proxying requests to Terraform data sources.
-og_description: Query Duo Security with SQL! Open source CLI. No DB required.
+og_description: Query any Terraform provider with SQL! Open source CLI. No DB required.
 og_image: "/images/plugins/jreyesr/tfbridge-social-graphic.png"
 ---
 
@@ -80,21 +80,23 @@ connection "tfbridge" {
   # in the required_providers block in the Terraform main file
   # Examples: "hashicorp/aws", "TimDurward/slack", "hashicorp/random"
   # If using a private Terraform registry, also include the hostname: "registry.acme.com/acme/supercloud"
-  provider = "integrations/github"
+  # provider = "integrations/github"
 
   # Write a single version for a Terraform provider, in the same way that you'd write it
   # in the required_providers block in the Terraform main file
   # Note that, unlike in the Terraform file, you can't use a version constraint, such as "~> 1.0" or ">= 1.2.0, < 2.0.0",
   # only explicit versions are allowed
-  version = "5.33.0"
+  # version = "5.33.0"
 
   # If the Terraform provider would require some configuration in its provider {...} block,
   # copy it here directly (just the _contents_ of the provider {} block, not the entire block!)
-  provider_config = <<EOT
-    token = "github_pat_9fu38f0amil9FVOKmI0_0F8PmI0m0FNm"
-  EOT
+  # provider_config = <<EOT
+  #   token = "github_pat_9fu38f0amil9FVOKmI0_0F8PmI0m0FNm"
+  # EOT
 }
 ```
+
+Uncomment and edit the `provider`, `version` and `provider_config` parameters.
 
 `provider` and `version` define which Terraform provider you want to use. You can find those in [the Terraform registry](https://registry.terraform.io/). If you have a working Terraform configuration, you may also run `terraform version` to retrieve the versions currently in use.
 
@@ -103,3 +105,4 @@ connection "tfbridge" {
 ## Get involved
 
 * Open source: https://github.com/jreyesr/steampipe-plugin-tfbridge
+* Community: [Join #steampipe on Slack →](https://turbot.com/community/join)

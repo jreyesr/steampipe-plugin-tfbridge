@@ -1,3 +1,9 @@
+⚠️ Please note that, as of 2023-09-07 (and some time before), [changes have been made to the Terraform Registry's Terms of Service](https://github.com/opentffoundation/roadmap/issues/24#issuecomment-1699535216) that, AFAICT, mean that you can't _technically_ run this plugin:
+
+> You may download providers, modules, policy libraries and/or other Services or Content from this website solely for use with, or in support of, HashiCorp Terraform.
+
+Please wait until [the OpenTF](https://github.com/opentffoundation/opentf) project finalizes its [open registry](https://github.com/opentffoundation/opentf/issues/258) before using this repo for commercial purposes. You should be OK for personal experimentation (?)
+
 ![image](https://hub.steampipe.io/images/plugins/jreyesr/tfbridge-social-graphic.png)
 
 # Terraform Bridge Plugin for Steampipe

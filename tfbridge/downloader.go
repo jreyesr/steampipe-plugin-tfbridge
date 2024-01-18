@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	tfaddr "github.com/hashicorp/terraform-registry-address"
+	svchost "github.com/hashicorp/terraform-svchost"
 	"github.com/hashicorp/terraform-svchost/disco"
 	"github.com/turbot/steampipe-plugin-sdk/v5/plugin"
 )
@@ -66,6 +67,22 @@ func DownloadProvider(ctx context.Context, name, version string, d *plugin.Table
 	if err != nil {
 		return
 	}
+
+	// NOTE: Around august 2023, Hashicorp changed the Terraform Registry's ToS so the only allowed use
+	// is "for use with, or in support of, HashiCorp Terraform"
+	// Since this isn't TF, we probably can't download providers from there
+	// Instead, providers are downloaded from the open-source OpenTofu project (https://opentofu.org/),
+	// which doesn't seem to have such limitations
+	// See https://github.com/opentffoundation/roadmap/issues/24#issuecomment-1699535216
+	// Note that this also covers the case where the user of the Steampipe plugin explicitly
+	// passes "registry.terraform.io/org/provider" as the source,
+	// since even in those cases we can't use the official TF registry
+	if provider.Hostname == tfaddr.DefaultProviderRegistryHost {
+		newDefaultRegistry := svchost.Hostname("registry.opentofu.org")
+		plugin.Logger(ctx).Info("resolveServiceLicensingFix", "oldProvider", provider.Hostname, "newProvider", newDefaultRegistry)
+		provider.Hostname = newDefaultRegistry
+	}
+
 	hostnameUrl, err := url.Parse(fmt.Sprintf("https://%s", provider.Hostname.String()))
 	if err != nil {
 		return
@@ -88,6 +105,7 @@ func DownloadProvider(ctx context.Context, name, version string, d *plugin.Table
 		runtime.GOARCH,
 	)
 	pluginVersionInfoUrl, _ := url.Parse(pluginVersionInfoLocation)
+	plugin.Logger(ctx).Debug("getProviderInfo", "url", pluginVersionInfoUrl)
 	resp, err := http.Get(pluginVersionInfoLocation)
 	if err != nil {
 		return
@@ -97,7 +115,7 @@ func DownloadProvider(ctx context.Context, name, version string, d *plugin.Table
 		err = fmt.Errorf("download: Terraform provider %s, version %s does not exist! Please check that it is available for your OS and arch", provider.ForDisplay(), version)
 		return
 	}
-	if resp.StatusCode != 200 || resp.Header.Get("content-type") != "application/json" {
+	if resp.StatusCode != 200 {
 		err = fmt.Errorf("get version response invalid: code %d, contenttype %s", resp.StatusCode, resp.Header.Get("content-type"))
 		return
 	}
